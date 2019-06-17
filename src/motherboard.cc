@@ -25,11 +25,15 @@ bool Motherboard::power_on(int argc, char *argv[])
 
     std::string rom_file_path;
 
-    if (argc > 1) //get file by command
+    if (argc == 2) //get file by command
     {
         rom_file_path = std::string(argv[1]);
     }
-    else
+    else if (argc == 4)
+    {
+        rom_file_path = std::string(argv[3]);
+    }
+    else if (argc == 1)
     {
         std::cout << "Please input relative path of the ROM:" << std::endl;
         std::cin >> rom_file_path;
@@ -81,65 +85,30 @@ bool Motherboard::power_on(int argc, char *argv[])
     mem.set_memory_byte(0xFF4B, 0x00);
     mem.set_memory_byte(0xFFFF, 0x00);
 
-    // create a white window
-    // r:255
-    // g:255
-    // b:255
-    form.create_window(SCREEN_WIDTH, SCREEN_HEIGHT, mem.cartridge.rom_name, 255, 255, 255);
-
     return true;
 }
 
-void Motherboard::loop(void)
+void Motherboard::loop(Emulatorform &form, Joypad &joypad, uint8_t scale)
 {
     while (true)
     {
-        bool keep_running = frame_rate_control();
-        if (!keep_running)
+        if (form.get_joypad_input(joypad, mem))
+        {
+            uint8_t cpu_cycle = cpu.next(mem);
+            ppu.ppu_main(mem.cartridge.auto_optimization * cpu_cycle, mem, form, scale);
+            timer.add_time(4 * cpu_cycle, mem);
+            //if(SDL_GetTicks()-fps_timer < FPS && ppu.ready_to_refresh)
+            if(ppu.ready_to_refresh)
+            {
+                ppu.ready_to_refresh = form.refresh_surface();
+                //SDL_Delay(FPS-SDL_GetTicks()+fps_timer);
+            }
+            //fps_timer=SDL_GetTicks();
+        }
+        else
         {
             break;
         }
     }
 }
 
-bool Motherboard::frame_rate_control()
-{
-    //auto start_time = high_resolution_clock::now();
-    //auto end_time = high_resolution_clock::now();
-
-    while (true)
-    {
-        // Maintain designated frequency of 50 Hz
-        // 20 ms per frame
-        /*
-        start_time = high_resolution_clock::now();
-        duration<double, std::milli> work_time = start_time - end_time;
-
-        if (work_time.count() < 20)
-        {
-            duration<double, std::milli> delta_ms(20 - work_time.count());
-            auto delta_ms_duration = std::chrono::duration_cast<milliseconds>(delta_ms);
-            sleep_for(milliseconds(delta_ms_duration.count()));
-        }
-
-        end_time = std::chrono::system_clock::now();
-        duration<double, std::milli> sleep_time = end_time - start_time;
-        */
-
-        bool workload_valid = workload();
-        return workload_valid;
-    }
-}
-
-bool Motherboard::workload()
-{
-    bool input_valid = form.get_joypad_input(the_joypad, mem);
-    if (input_valid)
-    {
-        uint8_t cpu_cycle = cpu.next(mem);
-        ppu.ppu_main(mem.cartridge.auto_optimization * cpu_cycle, mem, form);
-        timer.add_time(4 * cpu_cycle, mem);
-    }
-
-    return input_valid;
-}
